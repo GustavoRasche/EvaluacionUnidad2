@@ -11,107 +11,125 @@ using Medidores;
 
 namespace ServicioComunicaciones
 {
-    class Program
+    using System;
+    using System.IO;
+    using System.Net;
+    using System.Net.Sockets;
+
+    namespace ServicioComunicaciones
     {
-        static void Main(string[] args)
+        class Program
         {
-            int puerto = 3000;
-            string filePath = "lecturas.txt";
-            LecturaDAL lecturaDAL = new LecturaDAL(filePath);
-
-            TcpListener listener = new TcpListener(IPAddress.Any, puerto);
-            listener.Start();
-            Console.WriteLine("Servicio de comunicaciones iniciado. Escuchando en el puerto: " + puerto);
-
-            while (true)
+            static void Main(string[] args)
             {
-                TcpClient client = listener.AcceptTcpClient();
-                Console.WriteLine("Cliente conectado: " + client.Client.RemoteEndPoint);
+                Console.WriteLine("Servicio de Comunicaciones - Escuchando peticiones...");
 
-                StreamReader reader = new StreamReader(client.GetStream());
+                // Configuración del servidor
+                int port = 3000;
+                IPAddress ipAddress = IPAddress.Any;
 
-                // Mostrar el menú
-                Console.WriteLine("--- Menú ---");
-                Console.WriteLine("1. Ingresar Lecturas");
-                Console.WriteLine("2. Mostrar lecturas");
-                Console.WriteLine("3. Salir");
-                Console.WriteLine("Ingrese el número de la opción deseada:");
+                TcpListener listener = new TcpListener(ipAddress, port);
+                listener.Start();
 
-                string opcion = Console.ReadLine();
-
-                switch (opcion)
+                while (true)
                 {
-                    case "1":
-                        IngresarLectura(lecturaDAL, client);
-                        break;
+                    TcpClient client = listener.AcceptTcpClient();
+                    Console.WriteLine("Cliente conectado");
 
-                    case "2":
-                        MostrarLecturas(lecturaDAL);
-                        break;
+                    // Procesar la lectura recibida
+                    ProcesarLectura(client);
 
-                    case "3":
-                        Console.WriteLine("Saliendo del programa...");
-                        listener.Stop();
-                        return;
+                    client.Close();
+                    Console.WriteLine("Cliente desconectado");
 
-                    default:
-                        Console.WriteLine("Opción inválida. Por favor, ingrese un número válido.");
+                    // Mostrar el menú después de procesar una lectura
+                    MostrarMenu();
+                    string opcion = Console.ReadLine();
+                    if (opcion == "1")
+                    {
+                        MostrarLecturasGuardadas();
+                    }
+                    else if (opcion == "2")
+                    {
                         break;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Opción inválida. Inténtelo nuevamente.");
+                    }
                 }
 
-                client.Close();
-            }
-        }
-
-        static void MostrarLecturas(LecturaDAL lecturaDAL)
-        {
-            Console.WriteLine("--- Lecturas registradas ---");
-            var lecturas = lecturaDAL.ObtenerLecturas();
-
-            foreach (var lectura in lecturas)
-            {
-                Console.WriteLine($"ID Medidor: {lectura.MedidorId}, Fecha: {lectura.Fecha}, Valor Consumo: {lectura.ValorConsumo}");
-            }
-        }
-
-        static void IngresarLectura(LecturaDAL lecturaDAL, TcpClient client)
-        {
-            // Solicitar información al usuario
-            Console.WriteLine("Ingrese el ID del medidor:");
-            int medidorId;
-            if (!int.TryParse(Console.ReadLine(), out medidorId))
-            {
-                Console.WriteLine("ID de medidor inválido. Se omitirá la lectura.");
-                return;
+                Console.WriteLine("El programa se cerrará. Gracias por utilizar el Servicio de Comunicaciones.");
             }
 
-            Console.WriteLine("Ingrese la fecha y hora en el formato yyyy-MM-dd hh:mm:ss :");
-            string fechaHoraString = Console.ReadLine();
-            DateTime fechaHora;
-            if (!DateTime.TryParseExact(fechaHoraString, "yyyy-MM-dd HH:mm:ss", null, System.Globalization.DateTimeStyles.None, out fechaHora))
+            static void ProcesarLectura(TcpClient client)
             {
-                Console.WriteLine("Fecha y hora inválidas. Se omitirá la lectura.");
-                return;
+                try
+                {
+                    StreamReader reader = new StreamReader(client.GetStream());
+                    string lectura = reader.ReadLine();
+                    Console.WriteLine("Lectura recibida: " + lectura);
+
+                    // Almacenar la lectura en un archivo
+                    AlmacenarLectura(lectura);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error al procesar la lectura: " + ex.Message);
+                }
             }
 
-            Console.WriteLine("Ingrese el valor de consumo:");
-            decimal valorConsumo;
-            if (!decimal.TryParse(Console.ReadLine(), out valorConsumo))
+            static void AlmacenarLectura(string lectura)
             {
-                Console.WriteLine("Valor de consumo inválido. Se omitirá la lectura.");
-                return;
+                try
+                {
+                    string filePath = "lecturas.txt";
+                    using (StreamWriter writer = File.AppendText(filePath))
+                    {
+                        writer.WriteLine(lectura);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error al almacenar la lectura: " + ex.Message);
+                }
             }
 
-            // Crear la lectura y guardarla
-            Lectura lectura = new Lectura
+            static void MostrarLecturasGuardadas()
             {
-                MedidorId = medidorId,
-                Fecha = fechaHora,
-                ValorConsumo = valorConsumo
-            };
+                try
+                {
+                    string filePath = "lecturas.txt";
+                    if (File.Exists(filePath))
+                    {
+                        string[] lecturas = File.ReadAllLines(filePath);
+                        Console.WriteLine("--- Lecturas Guardadas ---");
+                        foreach (string lectura in lecturas)
+                        {
+                            Console.WriteLine(lectura);
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No se encontraron lecturas guardadas.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error al mostrar las lecturas guardadas: " + ex.Message);
+                }
+            }
 
-            lecturaDAL.GuardarLectura(lectura);
-            Console.WriteLine("Lectura guardada correctamente.");
+            static void MostrarMenu()
+            {
+                Console.WriteLine();
+                Console.WriteLine("===== Menú =====");
+                Console.WriteLine("1. Mostrar lecturas guardadas");
+                Console.WriteLine("2. Salir");
+                Console.WriteLine("=================");
+                Console.Write("Ingrese la opción deseada: ");
+            }
         }
     }
+
 }
